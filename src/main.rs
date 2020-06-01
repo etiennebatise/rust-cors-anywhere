@@ -4,8 +4,9 @@ use hyper::service::{make_service_fn, service_fn};
 use hyper::header::{ACCESS_CONTROL_ALLOW_ORIGIN, HeaderValue};
 
 async fn hello_world(_req: Request<Body>) -> Result<Response<Body>, hyper::Error> {
-    let url_str = format!("http://domain.tld{}", _req.uri());
-    // FIXME : Fails silently
+    let uri_str = format!("{}", _req.uri());
+    let url_str = format!("http://{}", &uri_str[1..]);
+    // FIXME : Fails silently if url url_str cannot be parsed
     let url = url_str.parse::<Uri>().expect("failed to parse URL");
     let mut res = Client::new().get(url).await?;
     let headers = res.headers_mut();
