@@ -1,14 +1,26 @@
 use std::net::SocketAddr;
 use hyper::{Body, Request, Response, Server, Client, Uri};
 use hyper::service::{make_service_fn, service_fn};
-use hyper::header::{ACCESS_CONTROL_ALLOW_ORIGIN, HeaderValue};
+use hyper::header::{HOST, ACCESS_CONTROL_ALLOW_ORIGIN, HeaderValue};
+
+fn debug_request<T>(req: &Request<T>) -> () {
+    println!("{}", req.method());
+    println!("{}", req.uri());
+    for (key, value) in req.headers().iter() {
+        println!("{:?}: {:?}", key, value.clone());
+    }
+}
 
 async fn hello_world(mut req: Request<Body>) -> Result<Response<Body>, hyper::Error> {
-    let uri_str = format!("{}", req.uri());
-    let url_str = format!("http://{}", &uri_str[1..]);
-    let url = url_str.parse::<Uri>().expect("failed to parse URL");
-    // ^ Generate thread panic when uri is empty
-    *req.uri_mut() = url;
+    let uri : &str = &req.uri().to_string()[1..];
+    // ^ TODO Dont trust user input ([1..] might fail)
+    let target_url = format!("http://{}", uri);
+    let cols : Vec<&str> = uri.splitn(2, '/').collect::<Vec<&str>>();
+    let host = cols[0];
+    // ^ TODO  Don't trust user input(uri might not contain '/')
+    req.headers_mut().insert(HOST, HeaderValue::from_str(host).unwrap());
+    *req.uri_mut() = target_url.parse::<Uri>().expect("failed to parse URL");
+    // ^ TODO generate tokio crash when target_url is not a valid uri
     let mut res = Client::new().request(req).await?;
     let headers = res.headers_mut();
     headers.insert(ACCESS_CONTROL_ALLOW_ORIGIN, HeaderValue::from_static("*"));
