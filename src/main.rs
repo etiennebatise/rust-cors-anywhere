@@ -40,9 +40,9 @@ async fn shutdown_signal() {
 
 #[derive(StructOpt)]
 struct Cli {
-    #[structopt(long = "host")]
+    #[structopt(long = "host", default_value = "0.0.0.0")]
     host: Ipv4Addr,
-    #[structopt(short = "p", long = "port")]
+    #[structopt(short = "p", long = "port", default_value = "4000")]
     port: u16,
 }
 
