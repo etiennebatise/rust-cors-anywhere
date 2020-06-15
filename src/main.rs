@@ -1,8 +1,10 @@
 use hyper::header::{HeaderValue, ACCESS_CONTROL_ALLOW_ORIGIN, HOST};
 use hyper::service::{make_service_fn, service_fn};
 use hyper::{Body, Client, Request, Response, Server, Uri};
+use hyper_tls::HttpsConnector;
 use std::net::{Ipv4Addr, SocketAddr};
 use structopt::StructOpt;
+
 // use failure::ResultExt;
 // use exitfailure::ExitFailure;
 
@@ -15,17 +17,24 @@ fn debug_request<T>(req: &Request<T>) -> () {
 }
 
 async fn proxy(mut req: Request<Body>) -> Result<Response<Body>, hyper::Error> {
-    let uri: &str = &req.uri().to_string()[1..];
-    // ^ TODO Dont trust user input ([1..] might fail)
-    let target_url = format!("http://{}", uri);
-    let cols: Vec<&str> = uri.splitn(2, '/').collect::<Vec<&str>>();
-    let host = cols[0];
-    // ^ TODO  Don't trust user input(uri might not contain '/')
-    req.headers_mut()
-        .insert(HOST, HeaderValue::from_str(host).unwrap());
-    *req.uri_mut() = target_url.parse::<Uri>().expect("failed to parse URL");
-    // ^ TODO generate tokio crash when target_url is not a valid uri
+    // Create new URI from path and query
+    let req_uri = req.uri();
+    let req_path = &req_uri.path().to_string()[1..];
+    let target_uri_str = match req_uri.query() {
+        Some(query) => format!("http://{}?{}", req_path, query),
+        None => format!("http://{}", req_path),
+    };
+    // ^ TODO handle full authority
+    // ^ TODO handle scheme
+    // Set target uri in original request
+    *req.uri_mut() = target_uri_str.parse::<Uri>().expect("failed to parse URL");
+    // ^ TODO generate tokio crash when target_uri_str is not a valid uri
+    // Add 'Host' header for HTTP/1.1
+    let host = format!("{}", req.uri().host().unwrap());
+    req.headers_mut().insert(HOST, HeaderValue::from_str(&host).unwrap());
+    // Run the request
     let mut res = Client::new().request(req).await?;
+    // Insert CORS headers to response
     let headers = res.headers_mut();
     headers.insert(ACCESS_CONTROL_ALLOW_ORIGIN, HeaderValue::from_static("*"));
     Ok(res)

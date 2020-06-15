@@ -9,6 +9,7 @@ edition = "2018"
 [dependencies]
 tokio = { version = "0.2", features = ["full"] }
 hyper = "0.13"
+hyper-tls = "0.4.1"
 structopt = "0.3.13"
 failure = "0.1.7"
 exitfailure = "0.5.1"
