@@ -687,6 +687,7 @@ version = "0.1.0"
 dependencies = [
  "exitfailure",
  "failure",
+ "http",
  "hyper",
  "hyper-tls",
  "structopt",

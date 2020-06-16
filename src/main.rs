@@ -1,15 +1,17 @@
 use hyper::header::{HeaderValue, ACCESS_CONTROL_ALLOW_ORIGIN, HOST};
 use hyper::service::{make_service_fn, service_fn};
 use hyper::{Body, Client, Request, Response, Server, Uri};
-use hyper_tls::HttpsConnector;
+// use hyper_tls::HttpsConnector;
+use http::status::StatusCode;
 use std::net::{Ipv4Addr, SocketAddr};
 use structopt::StructOpt;
 
 // use failure::ResultExt;
 // use exitfailure::ExitFailure;
 
+#[allow(dead_code)]
 fn debug_request<T>(req: &Request<T>) -> () {
-    println!("{}", req.method());
+        println!("{}", req.method());
     println!("{}", req.uri());
     for (key, value) in req.headers().iter() {
         println!("{:?}: {:?}", key, value.clone());
@@ -27,17 +29,35 @@ async fn proxy(mut req: Request<Body>) -> Result<Response<Body>, hyper::Error> {
     // ^ TODO handle full authority
     // ^ TODO handle scheme
     // Set target uri in original request
-    *req.uri_mut() = target_uri_str.parse::<Uri>().expect("failed to parse URL");
-    // ^ TODO generate tokio crash when target_uri_str is not a valid uri
+    let target_uri = match target_uri_str.parse::<Uri>() {
+        Ok(u) => u,
+        Err(_) => {
+            return Ok(Response::builder()
+                .status(StatusCode::NOT_FOUND)
+                .body(Body::empty())
+                .unwrap());
+        }
+    };
+    *req.uri_mut() = target_uri;
     // Add 'Host' header for HTTP/1.1
     let host = format!("{}", req.uri().host().unwrap());
-    req.headers_mut().insert(HOST, HeaderValue::from_str(&host).unwrap());
-    // Run the request
-    let mut res = Client::new().request(req).await?;
-    // Insert CORS headers to response
-    let headers = res.headers_mut();
-    headers.insert(ACCESS_CONTROL_ALLOW_ORIGIN, HeaderValue::from_static("*"));
-    Ok(res)
+    req.headers_mut()
+        .insert(HOST, HeaderValue::from_str(&host).unwrap());
+
+    match Client::new().request(req).await {
+        Ok(mut res) => {
+            println!("{}", target_uri_str);
+            let headers = res.headers_mut();
+            headers.insert(ACCESS_CONTROL_ALLOW_ORIGIN, HeaderValue::from_static("*"));
+            return Ok(res)
+        }
+        Err(_) => {
+            return Ok(Response::builder()
+                      .status(StatusCode::INTERNAL_SERVER_ERROR)
+                      .body(Body ::empty())
+                      .unwrap());
+        }
+    }
 }
 
 async fn shutdown_signal() {
