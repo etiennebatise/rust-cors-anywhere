@@ -11,7 +11,7 @@ use structopt::StructOpt;
 
 #[allow(dead_code)]
 fn debug_request<T>(req: &Request<T>) -> () {
-        println!("{}", req.method());
+    println!("{}", req.method());
     println!("{}", req.uri());
     for (key, value) in req.headers().iter() {
         println!("{:?}: {:?}", key, value.clone());
@@ -19,7 +19,7 @@ fn debug_request<T>(req: &Request<T>) -> () {
 }
 
 // Create new URI from path and query
-fn new_uri(uri: &Uri) -> Result<Uri,http::uri::InvalidUri> {
+fn new_uri(uri: &Uri) -> Result<Uri, http::uri::InvalidUri> {
     let req_path = &uri.path().to_string()[1..];
     let target_uri_str = match uri.query() {
         Some(query) => format!("http://{}?{}", req_path, query),
@@ -28,11 +28,37 @@ fn new_uri(uri: &Uri) -> Result<Uri,http::uri::InvalidUri> {
     // ^ TODO handle full authority
     // ^ TODO handle scheme
     // Set target uri in original request
-     target_uri_str.parse::<Uri>()
+    target_uri_str.parse::<Uri>()
+}
+
+async fn run_request(
+    req: Request<Body>,
+    count: u8,
+) -> Result<Response<Body>, hyper::Error> {
+    if count == 0 {
+        Ok(Response::builder()
+            .status(StatusCode::INTERNAL_SERVER_ERROR)
+            .body(Body::empty())
+            .unwrap())
+    } else {
+        match Client::new().request(req).await {
+            Ok(mut res) => {
+                let headers = res.headers_mut();
+                headers.insert(ACCESS_CONTROL_ALLOW_ORIGIN, HeaderValue::from_static("*"));
+                return Ok(res);
+            }
+            Err(_) => {
+                return Ok(Response::builder()
+                    .status(StatusCode::INTERNAL_SERVER_ERROR)
+                    .body(Body::empty())
+                    .unwrap());
+            }
+        }
+    }
 }
 
 async fn proxy(mut req: Request<Body>) -> Result<Response<Body>, hyper::Error> {
-    let target_uri = match new_uri(req.uri()) {
+    *req.uri_mut() = match new_uri(req.uri()) {
         Ok(u) => u,
         Err(_) => {
             return Ok(Response::builder()
@@ -41,25 +67,12 @@ async fn proxy(mut req: Request<Body>) -> Result<Response<Body>, hyper::Error> {
                 .unwrap());
         }
     };
-    *req.uri_mut() = target_uri;
     // Add 'Host' header for HTTP/1.1
     let host = format!("{}", req.uri().host().unwrap());
     req.headers_mut()
         .insert(HOST, HeaderValue::from_str(&host).unwrap());
 
-    match Client::new().request(req).await {
-        Ok(mut res) => {
-            let headers = res.headers_mut();
-            headers.insert(ACCESS_CONTROL_ALLOW_ORIGIN, HeaderValue::from_static("*"));
-            return Ok(res)
-        }
-        Err(_) => {
-            return Ok(Response::builder()
-                      .status(StatusCode::INTERNAL_SERVER_ERROR)
-                      .body(Body ::empty())
-                      .unwrap());
-        }
-    }
+    run_request(req, 1).await
 }
 
 async fn shutdown_signal() {
