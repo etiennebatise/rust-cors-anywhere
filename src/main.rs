@@ -18,18 +18,21 @@ fn debug_request<T>(req: &Request<T>) -> () {
     }
 }
 
-async fn proxy(mut req: Request<Body>) -> Result<Response<Body>, hyper::Error> {
-    // Create new URI from path and query
-    let req_uri = req.uri();
-    let req_path = &req_uri.path().to_string()[1..];
-    let target_uri_str = match req_uri.query() {
+// Create new URI from path and query
+fn new_uri(uri: &Uri) -> Result<Uri,http::uri::InvalidUri> {
+    let req_path = &uri.path().to_string()[1..];
+    let target_uri_str = match uri.query() {
         Some(query) => format!("http://{}?{}", req_path, query),
         None => format!("http://{}", req_path),
     };
     // ^ TODO handle full authority
     // ^ TODO handle scheme
     // Set target uri in original request
-    let target_uri = match target_uri_str.parse::<Uri>() {
+     target_uri_str.parse::<Uri>()
+}
+
+async fn proxy(mut req: Request<Body>) -> Result<Response<Body>, hyper::Error> {
+    let target_uri = match new_uri(req.uri()) {
         Ok(u) => u,
         Err(_) => {
             return Ok(Response::builder()
@@ -46,7 +49,6 @@ async fn proxy(mut req: Request<Body>) -> Result<Response<Body>, hyper::Error> {
 
     match Client::new().request(req).await {
         Ok(mut res) => {
-            println!("{}", target_uri_str);
             let headers = res.headers_mut();
             headers.insert(ACCESS_CONTROL_ALLOW_ORIGIN, HeaderValue::from_static("*"));
             return Ok(res)
